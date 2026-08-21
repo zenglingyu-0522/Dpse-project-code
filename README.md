@@ -1,7 +1,7 @@
 # Drosophila pseudoobscura project
 
 This repository contains the scripts and notebooks used for
-the analyses presented in ‘Differential interactions of heteromorphic sperm classes with spermatheca underlie the cryptic female selection in Drosophila pseudoobscura’.
+the analyses presented in the Drosophila pseudoobscura project.
 
 ## Analysis workflow
 
