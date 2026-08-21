@@ -1,0 +1,97 @@
+---
+title: "Chromosomal distribution of Drosophila pseudoobscura putative sperm proteins"
+output: html_notebook
+---
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(readxl)
+
+list <- read_excel("~/PMR/ZLY_Workspace/02. Workspace/01. Male_tissues_proteins/density/01.Protein_distribution_on_Chr.xlsx")
+list
+```
+```{r}
+df_clean <- list %>%
+  dplyr::filter(Chr != "mito") %>% 
+  mutate(Chr_Group = case_when(
+    Chr == "AX" ~ "AX",
+    Chr == "DX" ~ "DX",
+    Chr %in% c("2", "3", "4") ~ Chr, # 2, 3, 4 分开
+    TRUE ~ "Other"
+  )) %>%
+  filter(Chr_Group != "Other")
+
+df_clean$Chr_Group <- factor(df_clean$Chr_Group, 
+                             levels = c("AX", "DX", "2", "3", "4"))
+
+global_sperm_prob <- sum(df_clean$Catogory == "sperm") / nrow(df_clean)
+global_non_prob <- 1 - global_sperm_prob
+global_probs <- c(global_sperm_prob, global_non_prob)
+
+stats_table <- df_clean %>%
+  group_by(Chr_Group) %>%
+  summarise(
+    Observed_Sperm = sum(Catogory == "sperm"),
+    Observed_Non = sum(Catogory == "non-sperm"),
+    Total = n()
+  ) %>%
+  mutate(
+    Expected_Sperm = Total * global_sperm_prob,
+    OE_Ratio = Observed_Sperm / Expected_Sperm
+  )
+stats_table
+```
+```{r}
+run_chisq_gof <- function(target_chr) {
+  data <- stats_table %>% dplyr::filter(Chr_Group == target_chr)
+  obs_counts <- c(data$Observed_Sperm, data$Observed_Non)
+  res <- chisq.test(x = obs_counts, p = global_probs)
+  return(list(
+    Chi_Sq = as.numeric(res$statistic),
+    P_val = res$p.value
+  ))
+}
+
+chisq_results <- map_dfr(stats_table$Chr_Group, run_chisq_gof)
+
+stats_table <- stats_table %>%
+  select(-any_of(c("Chi_Sq_Stat", "P_val", "P_adj"))) %>% # 防止重复
+  bind_cols(chisq_results) %>%
+  mutate(P_adj = p.adjust(P_val, method = "BH"))
+
+stats_table <- stats_table %>%
+  mutate(
+    Combined_Label = case_when(
+      P_adj < 0.05 ~ sprintf("X^2 = %.1f\nq = %.3f", Chi_Sq, P_adj),
+      TRUE ~ sprintf("X^2 = %.1f\nq = %.3f", Chi_Sq, P_adj) # 如果想全标的话
+    )
+  )
+
+p <- ggplot(stats_table, aes(x = Chr_Group, y = OE_Ratio, fill = Chr_Group)) +
+  geom_bar(stat = "identity", color = "black", width = 0.7) +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "black", linewidth = 0.25) +
+  geom_text(aes(label = Combined_Label, y = OE_Ratio + 0.06), 
+            vjust = 0, size = 4, fontface = "italic") + 
+  geom_text(aes(label = paste0(Observed_Sperm, "/", round(Expected_Sperm, 0)), y = 0.05), 
+            vjust = 0, size = 4, color = "white", fontface = "bold") +
+  scale_fill_manual(values = c(
+    "AX" = "#AA5440", "DX" = "#385B6F", 
+    "2" = "#5A9E6F", "3" = "#905998", "4" = "#EBC855"
+  )) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.25))) + 
+  labs(
+    title = "Sperm Protein Enrichment vs. Null Expectation",
+    y = "Observed / Expected no. genes",
+    x = "Chromosome"
+  ) +
+  theme_classic() +
+  theme(
+    legend.position = "none",
+    axis.text = element_text(size = 12, color = "black"),
+    axis.title = element_text(size = 12, color = "black")
+  )
+
+print(p)
+```

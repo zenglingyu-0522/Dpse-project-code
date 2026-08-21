@@ -1,0 +1,103 @@
+---
+title: "Global correlation between transcriptomic and proteomic expression levels"
+output: html_notebook
+---
+
+```{r}
+# Load library
+library(pheatmap)
+library(readr)
+library(tibble)
+library(ggplot2)
+library(tidyverse)
+library(ggVennDiagram)
+library(readxl)
+```
+
+```{r}
+prot_raw <- read_excel("~/PMR/ZLY_Workspace/02. Workspace/07.tissue-specific/04.pattern_heatmap/input/01.Dpse_protein_merge_LFQraw -2.xlsx")
+prot_raw <- as.data.frame(prot_raw) %>%
+  mutate(...1 = make.unique(...1, sep = "-")) %>%
+  column_to_rownames(var = "...1")
+prot_raw <- as.matrix(prot_raw)
+prot_raw <- prot_raw[rowMeans(prot_raw) > 100000, ]
+
+rna_raw <- read_csv("~/PMR/ZLY_Workspace/02. Workspace/07.tissue-specific/04.pattern_heatmap/input/01.raw_mean_rpkm5.csv")
+rna_raw <- as.data.frame(rna_raw) %>%
+  mutate(...1 = make.unique(...1, sep = "-")) %>%
+  column_to_rownames(var = "...1")
+rna_raw <- as.matrix(rna_raw)
+rna_raw <- rna_raw[rowSums(rna_raw) > 9, ]
+
+common_samples <- intersect(colnames(rna_raw), colnames(prot_raw))
+common_genes <- intersect(rownames(rna_raw), rownames(prot_raw))
+
+cat("Transcriptome number:", nrow(rna_raw), "\n",
+    "Proteome number:", nrow(prot_raw), "\n",
+    "Overlap:", length(common_genes), "\n")
+```
+```{r}
+data_rna  <- rna_raw[common_genes, common_samples]
+data_prot <- prot_raw[common_genes, common_samples]
+
+if (identical(rownames(data_rna), rownames(data_prot)) && 
+    identical(colnames(data_rna), colnames(data_prot))) {
+  message("Proteomic and transcriptomic datasets are matched.")
+} else {
+  stop("Proteomic and transcriptomic datasets are not matched.")
+}
+```
+```{r}
+mean_rna <- rowMeans(data_rna)
+mean_prot <- rowMeans(data_prot)
+scatter_df_global <- data.frame(
+  Mean_RNA = mean_rna,
+  Mean_Prot = mean_prot
+)
+
+cor_res <- cor.test(scatter_df_global$Mean_RNA, scatter_df_global$Mean_Prot, 
+                    method = "spearman", exact = FALSE)
+
+r_val <- round(cor_res$estimate, 3) 
+p_val <- cor_res$p.value
+p_val
+
+p_text <- ifelse(p_val < 0.001, "p < 0.001", paste0("p = ", round(p_val, 4)))
+n_val <- nrow(scatter_df_global)  
+
+stat_label <- paste0("Spearman R = ", r_val, "\n", p_text, "\nN = ", n_val)
+
+p_global_final <- ggplot(scatter_df_global, aes(x = log10(Mean_RNA + 1), y = log10(Mean_Prot + 1))) +
+  geom_point(color = "#404040", alpha = 0.4, size = 1.2) +
+  geom_smooth(method = "lm", color = "#d95f02", linetype = "solid", size = 1, se = TRUE) +
+  annotate(
+    "text", 
+    x = 0.2, y = 11.5,          
+    label = stat_label, 
+    hjust = 0, vjust = 1,       
+    size = 3.5,                 
+    fontface = "italic",       
+    color = "black"
+  ) +
+  scale_x_continuous(
+    limits = c(0, 5),          
+    breaks = seq(0, 5, 1)      
+  ) +
+  scale_y_continuous(
+    limits = c(4, 12),         
+    breaks = seq(4, 12, 2)     
+  ) +
+  labs(
+    title = "Global RNA vs Protein Expression",
+    x = "Log10 (Mean RPKM + 1)",
+    y = "Log10 (Mean LFQ + 1)"
+  ) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 13),
+    panel.grid.minor = element_blank() 
+  )
+
+print(p_global_final)
+```
+

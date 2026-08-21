@@ -1,0 +1,65 @@
+---
+title: "Group bubble plot"
+output: html_notebook
+---
+
+```{r}
+# Load library
+library(forcats)
+library(ggplot2)
+library(aplot)
+library(dplyr)
+library(scales)
+library(readxl)
+
+list <- read_excel("~/PMR/ZLY_Workspace/02. Workspace/04.6h-12h/2026.4 new/5.FRG GO/Selected.xlsx", 
+    sheet = "Selected2")
+A <- as.data.frame(list)
+A$Description <- as.factor(A$Description)
+A$Description <- fct_inorder(A$Description)
+
+A$Group <- factor(A$Group, levels = c("SP_virgin_vs_6h","SP_virgin_vs_12h","SP_12h_vs_6h","FRT_virgin_vs_6h", "FRT_virgin_vs_12h",'FRT_12h_vs_6h'))
+```
+```{r}
+# Original Version
+ggplot(A, aes(Group, Description)) + 
+  geom_point(aes(color=LogP, size=HitsGenesCountsInSelectedSet)) +  # 保留 size=Count
+  theme_bw() + 
+  theme(axis.text.x=element_text(angle = 45,hjust = 1, vjust=1)) + 
+  scale_color_gradient(low='#6699CC', high='#CC3333') + #low='#6699CC', high='#CC3333'
+  scale_size_continuous(range = c(1, 5), breaks = c(min(A$HitsGenesCountsInSelectedSet), max(A$HitsGenesCountsInSelectedSet))) +  # 只显示最小和最大值
+  labs(x=NULL, y=NULL) + 
+  guides(size=guide_legend(order=1))
+```
+```{r}
+## Annotation of up and down regulation
+up_pal   <- colorRampPalette(c("#F4D3CD", "#B85440"))
+down_pal <- colorRampPalette(c("#D0D9E0", "#3B5769"))
+un_pal   <- colorRampPalette(c("#E0E0E0", "#C9C9C9"))
+
+A <- A %>%
+  group_by(Cluster) %>%
+  mutate(
+    LogP_scaled = scales::rescale(LogP, to = c(0,1)),
+    fill_color = case_when(
+      Cluster == "Up" ~ up_pal(100)[as.numeric(cut(LogP_scaled, breaks=100))],
+      Cluster == "Down" ~ down_pal(100)[as.numeric(cut(LogP_scaled, breaks=100))],
+      Cluster == "Unannotated" ~ un_pal(100)[as.numeric(cut(LogP_scaled, breaks=100))]
+    )
+  ) %>% ungroup()
+
+ggplot(A, aes(x = Group, y = Description)) +
+  geom_point(aes(fill = fill_color, size = HitsGenesCountsInSelectedSet), shape=21, color="black", stroke=0.25) +
+  scale_fill_identity() +  # 使用预先生成的颜色
+  theme_bw() +
+  theme(
+    panel.background = element_rect(fill = "#F6F6F6"),
+    axis.text.x = element_text(angle=45, hjust=1, vjust=1),
+    panel.grid.major = element_line(color="white", size=0.25),
+    panel.grid.minor = element_line(color="white", size=0.25)
+  ) +
+  scale_size_continuous(range = c(2,8), breaks = c(min(A$Count), max(A$Count))) +
+  labs(x=NULL, y=NULL, fill="LogP", size="Count")+
+  scale_x_discrete(expand = expansion(add = 0.75)) +  # X 轴往外扩展 1
+  scale_y_discrete(expand = expansion(add = 0.8)) 
+```

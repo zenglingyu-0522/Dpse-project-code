@@ -1,0 +1,69 @@
+---
+title: "Identification of tissue specific genes & housekeeping genes"
+output: html_notebook
+---
+
+```{r}
+# Load library
+library(dplyr)
+library(tibble)
+library(pheatmap)
+```
+```{r}
+# 1. Tissue specific genes
+expr <- read.csv("~/PMR/ZLY_Workspace/02. Workspace/07.tissue-specific/Dpse_mean_rpkm_8tissue.csv", row.names = 1, check.names = FALSE)
+expr_filtered <- expr[rowMeans(expr) > 1, ]
+
+## 1.Define tau
+tau_index <- function(x) {
+  if(max(x) == 0) return(0)
+  1 - sum(x / max(x)) / (length(x) - 1)
+}
+
+## 2.Calculate tau for each gene
+tau_scores <- apply(expr_filtered, 1, tau_index)
+
+## 3.choose tau threshold(#0.75)
+###1.Inspect the τ value distribution, If most genes have τ < 0.5 and a small peak is above 0.85 → threshold is reasonable.
+hist(tau_scores, breaks = 50, col = "skyblue",
+     main = "Distribution of Tau values",
+     xlab = "Tau")
+abline(v = c(0.6, 0.7, 0.8, 0.85, 0.9), col = "red", lty = 2)
+```
+```{r}
+###2.Number of genes above different thresholds
+thresholds <- seq(0.6, 0.9, by = 0.05)
+gene_counts <- sapply(thresholds, function(t) sum(tau_scores > t))
+gene_count_df <- data.frame(Threshold = thresholds, Num_Genes = gene_counts)
+print(gene_count_df)
+```
+```{r}
+###3.heatmap
+tissue_max <- apply(expr_filtered, 1, function(x) colnames(expr_filtered)[which.max(x)])
+top_genes <- names(sort(tau_scores, decreasing = TRUE)[1:100])
+expr_top <- expr_filtered[top_genes, ]
+pheatmap(expr_top, scale = "row", cluster_rows = TRUE, cluster_cols = TRUE, show_rownames = FALSE,
+         main = "Top 100 Tau Genes")
+```
+```{r}
+## 4.Define tissue-specific genes
+tau_threshold <- 0.8   # adjustable
+tissue_specific_genes <- names(tau_scores[tau_scores > tau_threshold])
+tissue_specific_df <- data.frame(
+  Gene = tissue_specific_genes,
+  Tau = tau_scores[tissue_specific_genes],
+  Max_Tissue = tissue_max[tissue_specific_genes]
+)
+```
+
+```{r}
+## 5. Housekeeping genes
+# Housekeeping = low tau, broadly expressed
+tau_threshold_hk <- 0.2   # common cutoff (can be 0.2–0.3 depending on distribution)
+housekeeping_genes <- names(tau_scores[tau_scores < tau_threshold_hk])
+housekeeping_df <- data.frame(
+  Gene = housekeeping_genes,
+  Tau = tau_scores[housekeeping_genes],
+  MeanExpr = rowMeans(expr_filtered[housekeeping_genes, ])
+) %>% arrange(Tau)
+```

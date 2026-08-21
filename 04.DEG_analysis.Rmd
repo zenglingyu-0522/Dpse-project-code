@@ -1,0 +1,49 @@
+---
+title: "Differentially expressed gene analysis"
+output: html_notebook
+---
+
+```{r}
+library(readr)
+library(dplyr) 
+
+cts <- as.matrix(read.table("~/PMR/GWX workreport/GWX workreport/pepline/2.differential_expression_analysis/01.DEG/001.input_files_and_code/DEseq2.tsv", sep = "\t", header = TRUE, row.names = "gene_id"))
+
+coldata <- read.csv("~/PMR/GWX workreport/GWX workreport/pepline/2.differential_expression_analysis/01.DEG/001.input_files_and_code/FRT_virgin_vs_PM12h.csv", header = TRUE, row.names = 1) #We take FRT (virgin_vs_PM12h) as an example. Analysis for other group follows the same pipeline.
+```
+```{r}
+coldata
+coldata$condition <- factor(coldata$condition)
+condition <- factor(c(rep("FRT_PM12h",3), rep("FRT_virgin",3)))
+head(cts,2)
+coldata
+rownames(coldata) <- sub("fb", "", rownames(coldata))
+all(rownames(coldata) %in% colnames(cts))
+all(rownames(coldata) == colnames(cts))
+cts <- cts[, rownames(coldata)]
+all(rownames(coldata) == colnames(cts))
+```
+```{r}
+library("DESeq2")
+dds <- DESeqDataSetFromMatrix(countData = cts,
+                              colData = coldata,
+                              design = ~ condition)
+dds
+dds <- DESeq(dds)
+resultsNames(dds)
+res <- results(dds)
+summary(res)
+```
+
+
+```{r}
+table(res$padj<0.05) #取P值小于0.05的结果
+res <- res[order(res$padj),]
+diff_gene_deseq2 <-subset(res,padj < 0.05 & (log2FoldChange > 2 | log2FoldChange < -2))
+diff_gene_deseq2 <- row.names(diff_gene_deseq2)
+resdata <-  merge(as.data.frame(res),as.data.frame(counts(dds,normalize=TRUE)),by="row.names",sort=FALSE)
+resdata 
+# 得到csv格式的差异表达分析结果
+#write.csv(resdata,file= "FRT_virgin_vs_PM12h.csv",row.names = F)
+```
+

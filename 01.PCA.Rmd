@@ -1,0 +1,246 @@
+---
+title: "PCA diagram of Drosophila pseudomorpha transcriptome and proteome datasets"
+output: html_notebook
+---
+
+```{r}
+# 1.packages
+library(bladderbatch)
+library(sva)
+library(ggplot2)
+library(FactoMineR)
+library(factoextra)
+library(pheatmap) 
+library(limma) 
+library(ggsci)
+library(ggrepel)
+library(ggforce)
+
+proj = "Dpse"
+```
+```{r}
+# 1. transcriptome
+library(readr)
+library(tibble)
+
+## sample information
+pheno <- read_tsv("~/PMR/文章撰写/v2/00. new analysis/11.PCA/transcriptome_sample_info.txt")
+pheno <- column_to_rownames(pheno, var = "sample")
+
+## TPM value
+exprSet <- read_csv("~/PMR/文章撰写/v2/00. new analysis/11.PCA/transcriptome.csv")
+exprSet <- column_to_rownames(exprSet, var = "...1")
+exprSet <- as.matrix(exprSet)
+exprSet <- log2(exprSet + 1)
+
+# 3.visualization
+## A.boxplot--------------------------------------
+mythe <- theme_bw() + theme(panel.grid.major=element_blank(),
+                            panel.grid.minor=element_blank())
+### dataframe for plotting
+data <- data.frame(expression=c(exprSet),
+                   sample=rep(colnames(exprSet),
+                              each=nrow(exprSet)))
+dim(data)
+
+p <- ggplot(data = data, aes(x=sample, y=expression, fill=sample))
+p1 <- p + geom_boxplot() +
+  mythe +
+  theme(axis.text.x = element_text(angle = 90)) +
+  xlab(NULL) + ylab("Expression of genes")
+p1
+
+## B.PCA analysis------------------------------------------------------
+exp = t(exprSet) 
+exp = as.data.frame(exp)
+dim(exp)
+
+ac <- data.frame(
+  row.names = rownames(exp),
+  Group = pheno$tissue,
+  Stage = pheno$stage,
+  Sex = pheno$sex   
+)
+stage_order <- c("Virgin", "6h post-mating", "12h post-mating")
+ac$Stage <- factor(ac$Stage, levels = stage_order, ordered = TRUE)
+
+pro = proj
+this_title <- paste0(pro, '_transcriptome_PCA')
+
+dat.pca <- PCA(exp, scale.unit = TRUE, graph = FALSE)
+#summary(dat.pca)
+#library(factoextra)
+#eig.val <- get_eigenvalue(dat.pca)
+#print(eig.val)
+
+pca_data <- as.data.frame(dat.pca$ind$coord)
+pca_data$Group <- ac$Group
+pca_data$Stage <- ac$Stage
+pca_data$Sex <- ac$Sex
+
+my_colors <- c(
+  "Testis" = "#A65440",      
+  "Ovary" = "#905998",       
+  "Head" = "#9A9A90",       
+  "Accessory gland" = "#385B6F",          
+  "FRT" = "#EBC855",         
+  "Seminal vesicle" = "#5A9E6F",          
+  "Spermatheca" = "#4B4B4B",
+  "Whole body" = "#A8C4D1"
+)
+
+p2 <- ggplot(pca_data, aes(x = Dim.1, y = Dim.2, color = Group, size = Stage, shape = Sex)) +
+  geom_point(alpha = 0.8) +
+  scale_color_manual(values = my_colors) + 
+  scale_shape_manual(values = c(16, 17)) + 
+  scale_size_manual(values = c(5, 6.5, 10)) + 
+  theme_bw() +
+  theme(
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank(), 
+    plot.title = element_text(size = 16, hjust = 0.5),
+    panel.border = element_rect(color = "black", linewidth = 0.25) 
+  ) +
+  labs(title = this_title, x = "Dim1", y = "Dim2")
+
+x_min <- min(pca_data$Dim.1) - 15
+x_max <- max(pca_data$Dim.1) + 15
+y_min <- min(pca_data$Dim.2) - 8
+y_max <- max(pca_data$Dim.2) + 8
+p2_fixed <- p2 + 
+  coord_cartesian(xlim = c(x_min, x_max), 
+                  ylim = c(y_min, y_max))
+p2_fixed
+
+p2_zoom_clean <- p2_fixed + 
+  coord_cartesian(xlim = c(-43, -23), ylim = c(-33, 20)) +
+  labs(title = paste0(this_title, " (Zoomed Center)"))
+p2_zoom_clean
+```
+
+
+```{r}
+ggsave(
+  filename = "D:/Documents/PMR/文章撰写/v3/p2_fixed.pdf", 
+  plot = p2_fixed, 
+  width = 5,           # 宽度（默认单位为英寸）
+  height = 3,          # 高度
+  dpi = 300            # 分辨率
+)
+
+# 保存 p2_zoom_clean 为 PDF
+ggsave(
+  filename = "D:/Documents/PMR/文章撰写/v3/p2_zoom_clean.pdf", 
+  plot = p2_zoom_clean, 
+  width = 5, 
+  height = 3, 
+  dpi = 300
+)
+```
+```{r}
+# 2. proteome
+pheno <- read_tsv("~/PMR/文章撰写/v2/00. new analysis/11.PCA/proteome_sample_info.txt")
+pheno <- column_to_rownames(pheno, var = "sample")
+## Protein abundance
+library(readxl)
+exprSet <- read_excel("~/PMR/文章撰写/v2/00. new analysis/11.PCA/proteome.xlsx")
+exprSet <- column_to_rownames(exprSet, var = "...1")
+exprSet <- as.matrix(exprSet)
+exprSet <- log10(exprSet + 1)
+
+# 3.visualization
+## A.boxplot--------------------------------------
+mythe <- theme_bw() + theme(panel.grid.major=element_blank(),
+                            panel.grid.minor=element_blank())
+### 
+data <- data.frame(expression=c(exprSet),
+                   sample=rep(colnames(exprSet),
+                              each=nrow(exprSet)))
+dim(data)
+
+p <- ggplot(data = data, aes(x=sample, y=expression, fill=sample))
+p1 <- p + geom_boxplot() +
+  mythe +
+  theme(axis.text.x = element_text(angle = 90)) +
+  xlab(NULL) + ylab("Expression of genes")
+p1
+
+## B.PCA analysis------------------------------------------------------
+exp = t(exprSet) 
+exp = as.data.frame(exp)
+dim(exp)
+
+ac <- data.frame(
+  row.names = rownames(exp),
+  Group = pheno$tissue,
+  Stage = pheno$stage,
+  Sex = pheno$sex   
+)
+stage_order <- c("Virgin", "6h post-mating", "12h post-mating")
+ac$Stage <- factor(ac$Stage, levels = stage_order, ordered = TRUE)
+
+pro = proj
+this_title <- paste0(pro, '_proteome_PCA')
+
+dat.pca <- PCA(exp, scale.unit = TRUE, graph = FALSE)
+#summary(dat.pca)
+#library(factoextra)
+#eig.val <- get_eigenvalue(dat.pca)
+#print(eig.val)
+
+pca_data <- as.data.frame(dat.pca$ind$coord)
+pca_data$Group <- ac$Group
+pca_data$Stage <- ac$Stage
+pca_data$Sex <- ac$Sex
+
+my_colors <- c(
+  "Testis" = "#A65440",      
+  "Accessory gland" = "#385B6F",          
+  "FRT" = "#EBC855",         
+  "Seminal vesicle" = "#5A9E6F",          
+  "Spermatheca" = "#4B4B4B"
+)
+
+p2 <- ggplot(pca_data, aes(x = Dim.1, y = Dim.2, color = Group, size = Stage, shape = Sex)) +
+  geom_point(alpha = 0.6) +
+  scale_color_manual(values = my_colors) + 
+  scale_shape_manual(values = c(16, 17)) + 
+  scale_size_manual(values = c(5, 6.5, 10)) + 
+  theme_bw() +
+  theme(
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank(), 
+    plot.title = element_text(size = 16, hjust = 0.5),
+    panel.border = element_rect(color = "black", linewidth = 0.25) 
+  ) +
+  labs(title = this_title, x = "Dim1", y = "Dim2")
+
+x_min <- min(pca_data$Dim.1) - 15
+x_max <- max(pca_data$Dim.1) + 15
+y_min <- min(pca_data$Dim.2) - 8
+y_max <- max(pca_data$Dim.2) + 8
+p2_fixed <- p2 + 
+  coord_cartesian(xlim = c(x_min, x_max), 
+                  ylim = c(y_min, y_max))
+p2_fixed
+```
+
+```{r}
+ggsave(
+  filename = "D:/Documents/PMR/文章撰写/v3/p2_fixed.pdf", 
+  plot = p2_fixed, 
+  width = 5,           # 宽度（默认单位为英寸）
+  height = 3,          # 高度
+  dpi = 300            # 分辨率
+)
+
+# 保存 p2_zoom_clean 为 PDF
+ggsave(
+  filename = "D:/Documents/PMR/文章撰写/v3/p2_zoom_clean.pdf", 
+  plot = p2_zoom_clean, 
+  width = 5, 
+  height = 3, 
+  dpi = 300
+)
+```
+

@@ -1,0 +1,332 @@
+---
+title: "Post-mating molecular dynamics in female reproductive tissues (Euler plot & stacked bar chart)"
+output: html_notebook
+---
+
+```{r}
+# 1. Euler plot (similar to Venn diagram)
+library(eulerr)
+# 6h - 12h post-mating
+## all
+fit1 <- euler(c(
+  "MDsperm" = 215,
+  "MDsfp"   = 18,
+  "FRG"     = 2055,
+  "MDsperm&MDsfp" = 36,
+  "MDsperm&FRG"   = 31,
+  "MDsfp&FRG"     = 0,
+  "MDsperm&MDsfp&FRG" = 5
+))
+
+fit2 <- euler(c(
+  "MDsperm" = 214,
+  "MDsfp"   = 19,
+  "FRG"     = 1840,
+  "MDsperm&MDsfp" = 34,
+  "MDsperm&FRG"   = 34,
+  "MDsfp&FRG"     = 1,
+  "MDsperm&MDsfp&FRG" = 6
+))
+
+p1 <- plot(
+  fit1,
+  fills = list(
+    fill = c(
+      adjustcolor("#C98A7B", alpha.f = 0.5),
+      adjustcolor("#6D8595", alpha.f = 0.5),
+      adjustcolor("#E9D898", alpha.f = 0.5)
+    ),
+    col = NA
+  ),
+  edges = list(col = "black"),
+  quantities = list(
+    cex = 1.2,
+    font = 1
+  ),
+  labels = list(
+    cex = 1.3,
+    font = 1
+  )
+)
+
+p2 <- plot(
+  fit2,
+  fills = list(
+    fill = c(
+      adjustcolor("#C98A7B", alpha.f = 0.5),
+      adjustcolor("#6D8595", alpha.f = 0.5),
+      adjustcolor("#E9D898", alpha.f = 0.5)
+    ),
+    col = NA
+  ),
+  edges = list(col = "black"),
+  quantities = list(
+    cex = 1.2,
+    font = 1
+  ),
+  labels = list(
+    cex = 1.3,
+    font = 1
+  )
+)
+######################################################################################
+# 6h - 12h post-mating - FRT
+## all
+fit3 <- euler(c(
+  "MDsperm" = 231,
+  "MDsfp"   = 18,
+  "FRG"     = 393,
+  "MDsperm&MDsfp" = 38,
+  "MDsperm&FRG"   = 13,
+  "MDsfp&FRG"     = 0,
+  "MDsperm&MDsfp&FRG" = 2
+))
+
+fit4 <- euler(c(
+  "MDsperm" = 235,
+  "MDsfp"   = 19,
+  "FRG"     = 440,
+  "MDsperm&MDsfp" = 38,
+  "MDsperm&FRG"   = 10,
+  "MDsfp&FRG"     = 0,
+  "MDsperm&MDsfp&FRG" = 2
+))
+
+p3 <- plot(
+  fit3,
+  fills = list(
+    fill = c(
+      adjustcolor("#C98A7B", alpha.f = 0.5),
+      adjustcolor("#6D8595", alpha.f = 0.5),
+      adjustcolor("#E9D898", alpha.f = 0.5)
+    ),
+    col = NA
+  ),
+  edges = list(col = "black"),
+  quantities = list(
+    cex = 1.2,
+    font = 1
+  ),
+  labels = list(
+    cex = 1.3,
+    font = 1
+  )
+)
+
+p4 <- plot(
+  fit4,
+  fills = list(
+    fill = c(
+      adjustcolor("#C98A7B", alpha.f = 0.5),
+      adjustcolor("#6D8595", alpha.f = 0.5),
+      adjustcolor("#E9D898", alpha.f = 0.5)
+    ),
+    col = NA
+  ),
+  edges = list(col = "black"),
+  quantities = list(
+    cex = 1.2,
+    font = 1
+  ),
+  labels = list(
+    cex = 1.3,
+    font = 1
+  )
+)
+#####################################################################################
+# 6h - 12h post-mating - spermatheca
+## all
+fit5 <- euler(c(
+  "MDsperm" = 178,
+  "MDsfp"   = 13,
+  "FRG"     = 1826,
+  "MDsperm&MDsfp" = 33,
+  "MDsperm&FRG"   = 18,
+  "MDsfp&FRG"     = 0,
+  "MDsperm&MDsfp&FRG" = 4
+))
+
+fit6 <- euler(c(
+  "MDsperm" = 212,
+  "MDsfp"   = 11,
+  "FRG"     = 1515,
+  "MDsperm&MDsfp" = 32,
+  "MDsperm&FRG"   = 26,
+  "MDsfp&FRG"     = 1,
+  "MDsperm&MDsfp&FRG" = 4
+))
+
+p5 <- plot(
+  fit5,
+  fills = list(
+    fill = c(
+      adjustcolor("#C98A7B", alpha.f = 0.5),
+      adjustcolor("#6D8595", alpha.f = 0.5),
+      adjustcolor("#E9D898", alpha.f = 0.5)
+    ),
+    col = NA
+  ),
+  edges = list(col = "black"),
+  quantities = list(
+    cex = 1.2,
+    font = 1
+  ),
+  labels = list(
+    cex = 1.3,
+    font = 1
+  )
+)
+
+p6 <- plot(
+  fit6,
+  fills = list(
+    fill = c(
+      adjustcolor("#C98A7B", alpha.f = 0.5),
+      adjustcolor("#6D8595", alpha.f = 0.5),
+      adjustcolor("#E9D898", alpha.f = 0.5)
+    ),
+    col = NA
+  ),
+  edges = list(col = "black"),
+  quantities = list(
+    cex = 1.2,
+    font = 1
+  ),
+  labels = list(
+    cex = 1.3,
+    font = 1
+  )
+)
+
+#####################################################################################
+library(gridExtra)
+grid.arrange(
+  arrangeGrob(p1), 
+  arrangeGrob(p2),
+  arrangeGrob(p3), 
+  arrangeGrob(p4),
+  arrangeGrob(p5), 
+  arrangeGrob(p6),
+  ncol = 2
+)
+```
+```{r}
+# 2. Stacked bar chart
+library(tidyverse)
+
+#####################################################################################
+## Changes of all gene/protein categories between 6h and 12h
+df <- tribble(
+  ~Condition,                 ~Group,            ~Count,
+  
+  # 6h - FRT + spermatheca
+  "6h_all",      "Other MD sperm",   215,
+  "6h_all",      "Other MD SFPs",      18,
+  "6h_all",      "Uniquely female-derived",       2055,
+  "6h_all",      "Sperm-associated SFPs",       41,
+  "6h_all",      "Female-associated sperms",       31,
+  
+  # 6h - FRT
+  "6h_FRT",      "Other MD sperm",   231,
+  "6h_FRT",      "Other MD SFPs",      18,
+  "6h_FRT",      "Uniquely female-derived",       393,
+  "6h_FRT",      "Sperm-associated SFPs",       40,
+  "6h_FRT",      "Female-associated sperms",       13,
+  
+  # 6h - Spermatheca
+  "6h_spermatheca",      "Other MD sperm",   178,
+  "6h_spermatheca",      "Other MD SFPs",      13,
+  "6h_spermatheca",      "Uniquely female-derived",       1826,
+  "6h_spermatheca",      "Sperm-associated SFPs",       37,
+  "6h_spermatheca",      "Female-associated sperms",       18,
+  
+  # 12h - FRT + spermatheca
+  "12h_all",      "Other MD sperm",   214,
+  "12h_all",      "Other MD SFPs",      19,
+  "12h_all",      "Uniquely female-derived",       1840,
+  "12h_all",      "Sperm-associated SFPs",       40,
+  "12h_all",      "Female-associated sperms",       34,
+  
+  # 12h - FRT
+  "12h_FRT",      "Other MD sperm",   235,
+  "12h_FRT",      "Other MD SFPs",      19,
+  "12h_FRT",      "Uniquely female-derived",       440,
+  "12h_FRT",      "Sperm-associated SFPs",       40,
+  "12h_FRT",      "Female-associated sperms",       10,
+  
+  # 12h - Spermatheca
+  "12h_spermatheca",      "Other MD sperm",   212,
+  "12h_spermatheca",      "Other MD SFPs",      11,
+  "12h_spermatheca",      "Uniquely female-derived",       1515,
+  "12h_spermatheca",      "Sperm-associated SFPs",       36,
+  "12h_spermatheca",      "Female-associated sperms",       26,
+)
+
+df <- df %>%
+  mutate(
+    Condition = factor(Condition,
+                       levels = c(
+                         "6h_all", "12h_all",
+                         "6h_FRT", "12h_FRT",
+                         "6h_spermatheca", "12h_spermatheca"
+                       ))
+  )
+
+
+mycols <- c(
+  "Other MD sperm" = "#D5AAA0",
+  "Other MD SFPs"   = "#93ADB7",
+  "Uniquely female-derived"      = "#F5E4AA",
+  "Sperm-associated SFPs"   = "#7E8287",
+  "Female-associated sperms"   = "#E0B97A"
+)
+
+
+df <- df %>%
+  mutate(
+    Condition = factor(Condition,
+                       levels = c(
+                         "6h_all", "12h_all",
+                         "6h_FRT", "12h_FRT",
+                         "6h_spermatheca", "12h_spermatheca"
+                       ))
+  )
+
+
+
+plot_pair <- function(data_pair, title_text) {
+  ggplot(data_pair, aes(x = Condition, y = Count, fill = Group)) +
+    geom_bar(stat = "identity", position = "fill") +
+    scale_y_continuous(labels = scales::percent_format()) +
+    scale_fill_manual(values = mycols) +
+    theme_bw(base_size = 14) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      panel.grid.major.x = element_blank()
+    ) +
+    labs(
+      title = title_text,
+      x = "",
+      y = "Percentage",
+      fill = "Category"
+    )
+}
+
+
+# ===== plot 1: all =====
+df_all <- df %>% filter(Condition %in% c("6h_all", "12h_all"))
+p_all <- plot_pair(df_all, "FRT + Spermatheca (all)")
+
+# ===== plot 2: FRT =====
+df_FRT <- df %>% filter(Condition %in% c("6h_FRT", "12h_FRT"))
+p_FRT <- plot_pair(df_FRT, "FRT only")
+
+# ===== plot 3: Spermatheca =====
+df_sp <- df %>% filter(Condition %in% c("6h_spermatheca", "12h_spermatheca"))
+p_sp <- plot_pair(df_sp, "Spermatheca only")
+
+p_all
+p_FRT
+p_sp
+```
+

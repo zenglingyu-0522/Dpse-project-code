@@ -1,0 +1,370 @@
+---
+title: "Evolutionary rate covariation (ERC) analysis"
+output: html_notebook
+---
+```{r}
+#Published Drosophila ERC matrix: https://csbweb.csb.pitt.edu/erc_analysis/Methods.php
+library(tidyverse)
+library(reshape2)
+library(ggplot2)
+library(ggpubr)
+library(dplyr)
+```
+```{r}
+#1.load
+erc <- read.table(
+  "D:/Documents/PMR/文章撰写/v2/00. new analysis/08.ERC/erc_dmel",
+  header = TRUE,
+  fill = TRUE,
+  check.names = FALSE
+)
+dim(erc) #11099 x 11100
+```
+```{r}
+#2.reconstruct
+genes <- colnames(erc)
+n <- length(genes)
+erc_full <- matrix(
+  NA,
+  nrow = n,
+  ncol = n
+)
+
+rownames(erc_full) <- genes
+colnames(erc_full) <- genes
+
+for(i in 2:n){
+  
+  vals <- as.numeric(
+    erc[i-1, 1:(i-1)]
+  )
+  
+  erc_full[i, 1:(i-1)] <- vals
+}
+
+erc_full[upper.tri(erc_full)] <-
+  t(erc_full)[upper.tri(erc_full)]
+
+diag(erc_full) <- 1
+
+#3.check
+erc_full[1:5,1:5]
+#saveRDS(erc_full, 'erc_dmel.RDS')
+```
+```{r}
+#4.function
+#erc_full <- readRDS('erc_dmel.RDS')
+get_pairwise_erc <- function(mat, set1, set2 = NULL){
+  if(is.null(set2)){
+    sub <- mat[set1, set1]
+    sub[upper.tri(sub, diag = TRUE)] <- NA
+    vals <- as.numeric(sub)
+  } else {
+    sub <- mat[set1, set2]
+    vals <- as.numeric(sub)
+  }
+  vals <- vals[!is.na(vals)]
+  return(vals)
+}
+
+#4.Define
+background <- rownames(erc_full)
+bg <- get_pairwise_erc(erc_full,background)
+median(bg)
+```
+```{r}
+## group vs background
+erc_test <- function(mat, set1, set2 = NULL, background_genes = NULL, n_perm = 1000){
+  if(is.null(set2)){
+    obs_vals <- get_pairwise_erc(mat, set1)
+  } else {
+    obs_vals <- get_pairwise_erc(mat, set1, set2)
+  }
+  obs <- median(obs_vals)
+  if(is.null(background_genes)){
+    background_genes <- rownames(mat)
+  }
+  n1 <- length(set1)
+  perm_stats <- numeric(n_perm)
+  set.seed(123)
+  for(i in 1:n_perm){
+    rand_set <- sample(background_genes, n1)
+    if(is.null(set2)){
+      rand_vals <- get_pairwise_erc(mat, rand_set)
+    } else {
+      rand_vals <- get_pairwise_erc(mat, rand_set, set2)
+    }
+    perm_stats[i] <- median(rand_vals)
+  }
+  p_emp <- (sum(perm_stats >= obs) + 1) / (n_perm + 1)
+  z <- (obs - mean(perm_stats)) / sd(perm_stats)
+  return(list(
+    obs = obs,
+    perm = perm_stats,
+    p_emp = p_emp,
+    z = z,
+    values = obs_vals
+  ))
+}
+
+Reproductive <- scan("D:/Documents/PMR/文章撰写/v2/00. new analysis/08.ERC/Reproductive proteins.txt", what = character(), sep = ",", quiet = TRUE)
+SPnetwork <- c('FBgn0029768','FBgn0037036','FBgn0040093','FBgn0040092','FBgn0250842','FBgn0039597','FBgn0050488','FBgn0039598')
+new_SPnetwork <- c("FBgn0014868", "FBgn0051659", "FBgn0039598", "FBgn0034474", "FBgn0250842", "FBgn0039597", "FBgn0083966", "FBgn0031256", "FBgn0050488", "FBgn0025678", "FBgn0259967",  "FBgn0260766", "FBgn0015622", "FBgn0040093", "FBgn0054033", "FBgn0040092")
+MD_sperm_associated_SFP <- c('FBgn0004181','FBgn0015584','FBgn0030828','FBgn0034152','FBgn0034153','FBgn0034709','FBgn0040092','FBgn0040093','FBgn0050488','FBgn0051659','FBgn0054033','FBgn0083966','FBgn0260766','FBgn0265264','FBgn0053530','FBgn0016123','FBgn0039598','FBgn0025678','FBgn0037498','FBgn0031741','FBgn0035348','FBgn0265268','FBgn0050486','FBgn0051419','FBgn0051482','FBgn0262571','FBgn0039597','FBgn0000299','FBgn0033728','FBgn0035513','FBgn0013276','FBgn0038395','FBgn0034474','FBgn0039685','FBgn0039682','FBgn0038919','FBgn0037888','FBgn0259974','FBgn0003034','FBgn0033115','FBgn0033574')
+Female <- c("FBgn0003889", "FBgn0000047", "FBgn0001224", "FBgn0001224", "FBgn0001225", "FBgn0011270", "FBgn0011760", "FBgn0013813", "FBgn0014163", "FBgn0028997", "FBgn0030674", "FBgn0031347", "FBgn0031728", "FBgn0031728", "FBgn0032004", "FBgn0033371", "FBgn0034800", "FBgn0035005", "FBgn0035240", "FBgn0035581", "FBgn0035724", "FBgn0035957", "FBgn0035957", "FBgn0036222", "FBgn0036568", "FBgn0037064", "FBgn0038296", "FBgn0038706", "FBgn0039070", "FBgn0039809", "FBgn0043783", "FBgn0050410", "FBgn0052026", "FBgn0086691", "FBgn0086907", "FBgn0250823", "FBgn0267689", "FBgn0052407", "FBgn0038506", "FBgn0035817", "FBgn0030699", "FBgn0086687", "FBgn0086687", "FBgn0015872", "FBgn0028526", "FBgn0259735", "FBgn0053970", "FBgn0033205", "FBgn0041775")
+Female <- scan("D:/Documents/PMR/文章撰写/v2/00. new analysis/08.ERC/Female.txt", what = character(), sep = ",", quiet = TRUE)
+key <- c("FBgn0015622", "FBgn0014868", "FBgn0025678", "FBgn0259967", "FBgn0260766", "FBgn0083966", "FBgn0054033", "FBgn0051419", "FBgn0265268", "FBgn0032853", "FBgn0031256", "FBgn0040093", "FBgn0028944", "FBgn0050488", "FBgn0262571", "FBgn0051659", "FBgn0034153", "FBgn0039597", "FBgn0250842", "FBgn0040092", "FBgn0034474", "FBgn0015584", "FBgn0039598", "FBgn0037498", "FBgn0037036", "FBgn0003034", "FBgn0035042", "FBgn0034152", "FBgn0000299", "FBgn0033574", "FBgn0035348", "FBgn0038395", "FBgn0039682", "FBgn0039685", "FBgn0051482", "FBgn0033728", "FBgn0035513", "FBgn0013276", "FBgn0037888", "FBgn0033115")
+
+Reproductive <- Reproductive[Reproductive %in% rownames(erc_full)]
+SPnetwork <- SPnetwork[SPnetwork %in% rownames(erc_full)]
+new_SPnetwork <- new_SPnetwork[new_SPnetwork %in% rownames(erc_full)]
+MD_sperm_associated_SFP <- MD_sperm_associated_SFP[MD_sperm_associated_SFP %in% rownames(erc_full)]
+Female <- Female[Female %in% rownames(erc_full)]
+key <- key[key %in% rownames(erc_full)]
+
+res_reproductive_bg <- erc_test(erc_full,Reproductive)
+res_SP_bg <- erc_test(erc_full,SPnetwork)
+res_newSP_bg <- erc_test(erc_full,new_SPnetwork)
+res_sperm_associated_bg <- erc_test(erc_full,MD_sperm_associated_SFP)
+res_female_bg <- erc_test(erc_full,Female)
+res_key_bg <- erc_test(erc_full,key)
+```
+```{r}
+# Visualization
+df_reproductive <- data.frame(value = res_reproductive_bg$values, group = "Reproductive")
+df_sp <- data.frame(value = res_SP_bg$values, group = "SPnetwork")
+df_new_sp <- data.frame(value = res_newSP_bg$values, group = "new SPnetwork")
+df_sperm_sfp <- data.frame(value = res_sperm_associated_bg$values, group = "MD sperm-associated SFP")
+df_female <- data.frame(value = res_female_bg$values, group = "Female")
+df_key <- data.frame(value = res_key_bg$values, group = "key")
+
+df_all <- rbind(df_reproductive, df_sp, df_new_sp, df_sperm_sfp, df_female, df_key)
+df_summary <- df_all %>%
+  group_by(group) %>%
+  summarise(
+    median = median(value, na.rm = TRUE),
+    n = n()
+  ) %>%
+  arrange(desc(median))
+df_all$group <- factor(df_all$group,
+                       levels = df_summary$group)
+
+pvals <- data.frame(
+  group = c('Reproductive',"SPnetwork", "new SPnetwork", "MD sperm-associated SFP","Female","key"),
+  p = c(res_reproductive_bg$p_emp,
+        res_SP_bg$p_emp,
+        res_newSP_bg$p_emp,
+        res_sperm_associated_bg$p_emp,
+        res_female_bg$p_emp,
+        res_key_bg$p_emp
+        ),
+  z = c(res_reproductive_bg$z,
+        res_SP_bg$z,
+        res_newSP_bg$z,
+        res_sperm_associated_bg$z,
+        res_female_bg$z,
+        res_key_bg$z
+        )
+)
+
+pvals$label <- paste0(
+  "P=", signif(pvals$p, 2),
+  "\nZ=", round(pvals$z, 2)
+)
+
+my_colors <- c(
+  "Reproductive" = "#aa5440",
+  "SPnetwork" = "#385b6f",
+  "new SPnetwork" = "#5a9e6f",
+  "MD sperm-associated SFP" = "#905998",
+  "Female" = "#ebc855",
+  "key" = "#9a9a90"
+)
+```
+```{r}
+ggplot(df_all, aes(x = group, y = value, fill = group)) + 
+  stat_boxplot(geom = "errorbar", 
+               width = 0.5,         
+               linewidth = 0.5) +   
+  geom_boxplot(outlier.shape = NA,  
+               width = 0.5, 
+               linewidth = 0.5) +
+  stat_summary(fun = median,
+               geom = "point",
+               shape = 95,
+               size = 8,
+               color = "black") +
+  geom_text(
+    data = df_summary,
+    aes(x = group, y = median,
+        label = round(median, 3)),
+    vjust = -1.5, 
+    size = 3
+  ) +
+  geom_text(
+    data = pvals,
+    aes(x = group,
+        y = max(df_all$value, na.rm = TRUE) * 1.05,
+        label = label),
+    size = 3
+  ) +
+  scale_fill_manual(values = my_colors) +
+  theme_classic() +
+  labs(y = "ERC") +
+  theme(
+    axis.text.x = element_text(angle = 30, hjust = 1),
+    legend.position = "none"
+  ) + 
+  geom_hline(yintercept = 0,
+             linetype = "dashed",
+             color = "black",
+             linewidth = 0.5) +
+  coord_cartesian(ylim = c(-1, 1.5))
+```
+```{r}
+# Cross group comparison
+erc_group_group_test <- function(mat, set1, set2, background, n_perm = 1000){
+  obs_vals <- get_pairwise_erc(mat, set1, set2)
+  obs <- median(obs_vals)
+  n1 <- length(set1)
+  n2 <- length(set2)
+  perm <- numeric(n_perm)
+  set.seed(123) 
+  for(i in 1:n_perm){
+    r1 <- sample(background, n1)
+    r2 <- sample(background, n2)
+    perm[i] <- median(get_pairwise_erc(mat, r1, r2))
+  }
+  p <- (sum(perm >= obs) + 1) / (n_perm + 1)
+  z <- (obs - mean(perm)) / sd(perm) 
+  return(list(obs = obs, perm = perm, p = p, z = z, values = obs_vals))
+}
+
+all_genes <- rownames(erc_full)
+SPnetwork <- c('FBgn0029768','FBgn0037036','FBgn0040093','FBgn0040092','FBgn0250842','FBgn0039597','FBgn0050488','FBgn0039598')
+uniqueSPnetwork <- c("FBgn0014868", "FBgn0034153", "FBgn0051659", "FBgn0034474", "FBgn0015584", "FBgn0051419", "FBgn0083966", "FBgn0031256", "FBgn0037498", "FBgn0262571", "FBgn0034152", "FBgn0025678", "FBgn0028944", "FBgn0259967", "FBgn0035042", "FBgn0260766", "FBgn0015622", "FBgn0032853", "FBgn0054033", "FBgn0265268")
+MD_sperm_associated_SFP <- c('FBgn0004181','FBgn0015584','FBgn0030828','FBgn0034152','FBgn0034153','FBgn0034709','FBgn0040092','FBgn0040093','FBgn0050488','FBgn0051659','FBgn0054033','FBgn0083966','FBgn0260766','FBgn0265264','FBgn0053530','FBgn0016123','FBgn0039598','FBgn0025678','FBgn0037498','FBgn0031741','FBgn0035348','FBgn0265268','FBgn0050486','FBgn0051419','FBgn0051482','FBgn0262571','FBgn0039597','FBgn0000299','FBgn0033728','FBgn0035513','FBgn0013276','FBgn0038395','FBgn0034474','FBgn0039685','FBgn0039682','FBgn0038919','FBgn0037888','FBgn0259974','FBgn0003034','FBgn0033115','FBgn0033574')
+MD_sperm_associated_SFP1 <- c("FBgn0000299", "FBgn0033574", "FBgn0035348", "FBgn0038395", "FBgn0039682", "FBgn0039685", "FBgn0051482", "FBgn0025678", "FBgn0265268", "FBgn0033728", "FBgn0035513", "FBgn0013276", "FBgn0037888", "FBgn0033115") #Non-verlap published
+MD_sperm_associated_SFP2 <- c("FBgn0034709", "FBgn0004181", "FBgn0015584", "FBgn0030828", "FBgn0031741", "FBgn0034152", "FBgn0034153", "FBgn0034474", "FBgn0040093", "FBgn0053530", "FBgn0260766", "FBgn0265264", "FBgn0016123", "FBgn0050488", "FBgn0039598", "FBgn0037498", "FBgn0050486", "FBgn0051419", "FBgn0051659", "FBgn0054033", "FBgn0083966", "FBgn0262571", "FBgn0039597", "FBgn0040092", "FBgn0038919", "FBgn0259974", "FBgn0003034") #Overlap-published
+MD_sperm <- scan("D:/Documents/PMR/文章撰写/v2/00. new analysis/08.ERC/MDsperm.txt", what = character(), sep = ",", quiet = TRUE)
+Female_associated_sperm <- c('FBgn0035957','FBgn0001224','FBgn0001225','FBgn0003889','FBgn0035581','FBgn0013813','FBgn0014163','FBgn0031728','FBgn0015872','FBgn0011760','FBgn0028526','FBgn0028997','FBgn0030674','FBgn0030699','FBgn0031347','FBgn0032004','FBgn0033205','FBgn0033371','FBgn0034800','FBgn0035005','FBgn0035724','FBgn0035817','FBgn0037064','FBgn0038296','FBgn0038506','FBgn0038706','FBgn0039070','FBgn0039809','FBgn0041775','FBgn0043783','FBgn0050410','FBgn0052407','FBgn0053970','FBgn0086687','FBgn0086691','FBgn0086907','FBgn0250823','FBgn0259735','FBgn0267689','FBgn0052026','FBgn0000047','FBgn0036568','FBgn0035240','FBgn0011270','FBgn0036222')
+MD_SFP <- c('FBgn0000299','FBgn0003034','FBgn0004181','FBgn0010052','FBgn0013276','FBgn0015584','FBgn0016123','FBgn0025678','FBgn0028944','FBgn0029804','FBgn0030828','FBgn0031256','FBgn0031741','FBgn0032853','FBgn0033115','FBgn0033574','FBgn0033728','FBgn0034152','FBgn0034153','FBgn0034162','FBgn0034200','FBgn0034474','FBgn0034709','FBgn0035042','FBgn0035348','FBgn0035513','FBgn0036147','FBgn0037036','FBgn0037498','FBgn0037650','FBgn0037888','FBgn0038014','FBgn0038068','FBgn0038395','FBgn0038919','FBgn0039568','FBgn0039597','FBgn0039598','FBgn0039682','FBgn0039685','FBgn0040092','FBgn0040093','FBgn0050486','FBgn0050488','FBgn0051419','FBgn0051482','FBgn0051659','FBgn0053530','FBgn0054002','FBgn0054033','FBgn0083966','FBgn0250842','FBgn0259967','FBgn0259974','FBgn0260766','FBgn0262571','FBgn0264911','FBgn0265264','FBgn0265268','FBgn0283509')
+keyMDP <- c("FBgn0037498", "FBgn0038395", "FBgn0265264", "FBgn0025678", "FBgn0015622", "FBgn0000299", "FBgn0014868", "FBgn0003034", "FBgn0033115", "FBgn0040093", "FBgn0031256")
+
+SPnetwork <- SPnetwork[SPnetwork %in% rownames(erc_full)]
+uniqueSPnetwork <- uniqueSPnetwork[uniqueSPnetwork %in% rownames(erc_full)]
+MD_sperm_associated_SFP <- MD_sperm_associated_SFP[MD_sperm_associated_SFP %in% rownames(erc_full)]
+MD_sperm <- MD_sperm[MD_sperm %in% rownames(erc_full)]
+MD_SFP <- MD_SFP[MD_SFP %in% rownames(erc_full)]
+Female_associated_sperm <- Female_associated_sperm[Female_associated_sperm %in% rownames(erc_full)]
+Other_MDsperm1 <- setdiff(MD_sperm, MD_sperm_associated_SFP)
+Other_MDsperm_nofemale <- setdiff(MD_sperm, Female_associated_sperm)
+non_spermassoc_SFP <- setdiff(MD_SFP, MD_sperm_associated_SFP) 
+MD_sperm_associated_SFP1 <- MD_sperm_associated_SFP1[MD_sperm_associated_SFP1 %in% rownames(erc_full)] #Non-overlap published
+MD_sperm_associated_SFP2 <- MD_sperm_associated_SFP2[MD_sperm_associated_SFP2 %in% rownames(erc_full)]#overlap published
+Other_MDsperm2 <- setdiff(MD_sperm, non_spermassoc_SFP)
+Other_MDsperm3 <- setdiff(MD_sperm, MD_sperm_associated_SFP1)
+Other_MDsperm4 <- setdiff(MD_sperm, MD_sperm_associated_SFP2)
+keyMDP <- keyMDP[keyMDP %in% rownames(erc_full)]
+
+
+bg_genes <- all_genes
+bg_genes1 <- all_genes[!(all_genes %in% c(SPnetwork, uniqueSPnetwork))]
+bg_genes2 <- all_genes[!(all_genes %in% c(MD_sperm_associated_SFP, Other_MDsperm1))]
+bg_genes3 <- all_genes[!(all_genes %in% c(non_spermassoc_SFP, Other_MDsperm2))]
+bg_genes4 <- all_genes[!(all_genes %in% c(Female_associated_sperm, Other_MDsperm_nofemale))]
+
+res_SP_unique <- erc_group_group_test(mat = erc_full,set1 = SPnetwork,set2 = uniqueSPnetwork,background = bg_genes)
+res_spermassoc_sperm <- erc_group_group_test(mat = erc_full,set1 = MD_sperm_associated_SFP,set2 = Other_MDsperm1,background = bg_genes)
+res_nonspermassoc_sperm <- erc_group_group_test(mat = erc_full,set1 = non_spermassoc_SFP,set2 = Other_MDsperm2,background = bg_genes)
+res_femaleassoc_sperm <- erc_group_group_test(mat = erc_full,set1 = Female_associated_sperm,set2 = Other_MDsperm_nofemale,background = bg_genes)
+res_nonpublished_sperm_assoc_sperm <- erc_group_group_test(mat = erc_full,set1 = MD_sperm_associated_SFP1,set2 = Other_MDsperm3,background = bg_genes)
+res_published_sperm_assoc_sperm <- erc_group_group_test(mat = erc_full,set1 = MD_sperm_associated_SFP2,set2 = Other_MDsperm4,background = bg_genes)
+```
+```{r}
+## Draw plot
+vals_SP_unique <- get_pairwise_erc(erc_full, SPnetwork, uniqueSPnetwork)
+vals_sperm_assoc <- get_pairwise_erc(erc_full, MD_sperm_associated_SFP, Other_MDsperm1)
+vals_female_assoc <- get_pairwise_erc(erc_full, Female_associated_sperm, Other_MDsperm_nofemale)
+
+vals_sperm_assoc <- get_pairwise_erc(erc_full, MD_sperm_associated_SFP, Other_MDsperm1)
+vals_publishedsperm_assoc <- get_pairwise_erc(erc_full, MD_sperm_associated_SFP2, Other_MDsperm4)
+vals_nonpublishedsperm_assoc <- get_pairwise_erc(erc_full, MD_sperm_associated_SFP1, Other_MDsperm3)
+
+df_all <- rbind(
+  data.frame(value = vals_SP_unique, group = "SPnetwork vs new SPnetwork"),
+  data.frame(value = vals_female_assoc, group = "Female-associated sperm vs Other MD sperm"),
+  data.frame(value = vals_sperm_assoc, group = "MD sperm-associated SFPs vs MD sperm"),
+  data.frame(value = vals_publishedsperm_assoc, group = "published MD sperm-associated SFPs vs MD sperm"),
+  data.frame(value = vals_nonpublishedsperm_assoc, group = "nonpublished MD sperm-associated SFPs vs MD sperm")
+)
+
+df_summary <- df_all %>%
+  group_by(group) %>%
+  summarise(
+    median = median(value, na.rm = TRUE),
+    n = n()
+  ) %>%
+  arrange(desc(median))
+df_all$group <- factor(df_all$group,
+                       levels = df_summary$group)
+
+pvals <- data.frame(
+  group = c("SPnetwork vs new SPnetwork", 
+            "Female-associated sperm vs Other MD sperm",
+            "MD sperm-associated SFPs vs MD sperm",
+            'published MD sperm-associated SFPs vs MD sperm',
+            "nonpublished MD sperm-associated SFPs vs MD sperm"),
+  p = c(res_SP_unique$p, 
+        res_femaleassoc_sperm$p,
+        res_spermassoc_sperm$p,
+        res_published_sperm_assoc_sperm$p,   
+        res_nonpublished_sperm_assoc_sperm$p
+        ),
+  z = c(res_SP_unique$z, 
+        res_femaleassoc_sperm$z,
+        res_spermassoc_sperm$z,
+        res_published_sperm_assoc_sperm$z,   
+        res_nonpublished_sperm_assoc_sperm$z
+        ) 
+)
+
+pvals$label <- paste0(
+  "P=", signif(pvals$p, 2),
+  "\nZ=", round(pvals$z, 2)
+)
+
+bg_median <- median(bg)
+
+my_colors <- c("SPnetwork vs new SPnetwork"= "#aa5440", 
+                'Female-associated sperm vs Other MD sperm'= "#fdf9f9",
+                "MD sperm-associated SFPs vs MD sperm"= "#385b6f",
+                'published MD sperm-associated SFPs vs MD sperm'="#ebc855", 
+                "nonpublished MD sperm-associated SFPs vs MD sperm"= "#9a9a90"
+               )
+```
+```{r}
+ggplot(df_all, aes(x = group, y = value, fill = group)) +
+  stat_boxplot(geom = "errorbar", width = 0.2, linewidth = 0.5) +
+  geom_boxplot(outlier.shape = NA, width = 0.5, linewidth = 0.5) +
+  stat_summary(fun = median, geom = "point", shape = 95, size = 10, color = "black") +
+  geom_text(
+    data = pvals,
+    aes(x = group, 
+        y = max(df_all$value, na.rm = TRUE) * 1.3, 
+        label = label),
+    size = 3.5, 
+    vjust = 1,      
+    lineheight = 1
+  ) +
+  coord_cartesian(ylim = c(min(df_all$value), max(df_all$value) * 1.3)) +
+  geom_hline(yintercept = bg_median, linetype = "dashed", color = "black", linewidth = 0.6) +
+  scale_fill_manual(values = my_colors) +
+  theme_classic() +
+  labs(y = "Inter-group ERC", x = "") +
+  theme(
+    axis.text.x = element_text(angle = 30, hjust = 1),
+    legend.position = "none"
+  )
+```
+

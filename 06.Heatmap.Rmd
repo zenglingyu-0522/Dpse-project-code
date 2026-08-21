@@ -1,0 +1,308 @@
+---
+title: "General pepline for drawing heatmap plot in this study"
+output: html_notebook
+---
+```{r}
+library(pheatmap)
+library(tibble)
+library(readxl)
+
+transcriptome <- read_excel("~/PMR/ZLY_Workspace/02. Workspace/03.Male or female/01.heatmap/MDP/2026.4 NEW/new key MD sperm.xlsx", 
+    sheet = "【new MD sperm】-RPKM")
+transcriptome <- as.data.frame(transcriptome)
+
+transcriptome$...1 <- ave(
+  transcriptome$...1,
+  transcriptome$...1,
+  FUN = function(x) {
+    if (length(x) > 1) {
+      x[-1] <- paste0(x[-1], "-", seq_along(x[-1]) + 1)
+    }
+    x
+  }
+)
+
+transcriptome <- column_to_rownames(transcriptome, var = "...1")
+data_matrix <- as.matrix(transcriptome)
+data_matrix_log <- log10(data_matrix+1)
+```
+```{r}
+annotation_col = data.frame(
+  Sex = c(rep("Male",3),rep("Female",8)),
+  Stage = c(rep("Virgin",4),rep("Post-maintg 6h", 1), rep("Post-maintg 12h",1),rep("Virgin",1), rep("Post-maintg 6h", 1), rep("Post-maintg 12h",1),rep("Virgin",2)),
+ Organ = c(rep("Male",3),rep("FRT",3),rep("SP",3),rep("Negative control",2))
+)
+row.names(annotation_col) <- colnames(transcriptome)
+```
+```{r}
+# 1. Raw heatmap
+library(ComplexHeatmap)
+library(circlize)
+col_fun = colorRamp2(c(-2, 0, 2), c("#38639F", "white", "#DB5440"))
+
+row_sd <- apply(data_matrix_log, 1, sd)
+data_for_plot <- data_matrix_log[row_sd > 0, ]
+cat("raw row number:", nrow(data_matrix_log), "\n")
+cat("filtered row number:", nrow(data_for_plot), "\n")
+
+pheatmap(
+  data_for_plot,       
+  cluster_rows = TRUE, 
+  cluster_cols = FALSE, 
+  col = col_fun,
+  show_colnames = TRUE,
+  border_color = NA,
+  scale = "row",      
+  show_rownames = FALSE,
+  annotation_col = annotation_col, 
+  treeheight_row = 0,
+  cellwidth = 15, 
+  cellheight = 0.5
+)
+```
+```{r}
+# 2. Heatmap with row scaled
+data_scaled <- t(scale(t(data_for_plot)))
+data_scaled[data_scaled < -2] <- -2
+data_scaled[data_scaled > 2] <- 2
+
+color_palette <- colorRampPalette(c("#38639F", "white", "#DB5440"))(100)
+breaks <- seq(-2, 2, length.out = 101)  # 101 breaks for 100 colors
+
+pheatmap(
+  data_scaled,  # 使用手动标准化后的数据
+  cluster_rows = TRUE,
+  cluster_cols = FALSE,
+  color = color_palette,
+  breaks = breaks,
+  show_colnames = TRUE,
+  show_rownames = FALSE,
+  border_color = NA,
+  annotation_col = annotation_col,
+  treeheight_row = 0,
+  cellwidth = 15,
+  cellheight =0.5,
+  use_raster=FALSE
+)
+```
+```{r}
+# 3. Heatmap with annotated key genes
+library(ComplexHeatmap)
+library(grid)
+library(circlize)
+
+genes <- c("Act88F", "ATPsynCF6L", "ATPsynβL", "CaBP1", "CG9997", "Cnx99A", "Col4a1", "COX4L", "COX5BL", "COX6CL", "Cyt-c1L", "Cyt-c-d", "Jhbp5", "mt:ATPase6", "mt:CoII", "nmdyn-D7", "Ost48", "SdhAL", "SdhBL", "S-Lap1", "S-Lap3","Spn42De", "Swim", "tral")
+
+idx <- which(rownames(data_scaled) %in% genes)
+labels <- rownames(data_scaled)[idx]
+
+ht <- Heatmap(
+  data_scaled,
+  name = "Expression",
+  cluster_rows = TRUE,
+  cluster_columns = FALSE,
+  show_row_names = FALSE,   # 关闭默认行名
+  show_column_names = FALSE,
+  top_annotation = HeatmapAnnotation(df = annotation_col),
+  col = colorRamp2(c(-2, 0, 2), c("#38639F", "white", "#DB5440")),
+  width = unit(ncol(data_scaled) * 5, "mm"),
+  height = unit(nrow(data_scaled) * 0.25, "mm") 
+)
+
+ht + rowAnnotation(
+  link = anno_mark(
+    at = idx,
+    labels = labels,
+    labels_gp = gpar(fontsize =9),
+  )
+)
+```
+```{r}
+# 4. Drawing several heatmap plots for protein-protein interaction modules related to eusperm or parasperm
+library(ComplexHeatmap)
+library(circlize)
+library(readxl)
+library(grid)
+library(tibble)
+
+# 1. load in
+df <- read_excel("~/PMR/ZLY_Workspace/02. Workspace/05.two_sperm/2026.5 NEW/2.heatmap/2026.06.11 NEW/List.xlsx")
+df
+```
+```{r}
+color_map <- colorRamp2(c(-2, 0, 2), c("#38639F", "white", "#DB5440"))
+
+scale_rows <- function(m) {
+  m_scaled <- t(scale(t(m)))
+  m_scaled[is.na(m_scaled)] <- 0
+  return(m_scaled)
+}
+
+# 2. annotation
+# 2.1 Stage
+stage_colors <- c("Virgin" = "#AA5440", "PM 6h" = "#385B6F", "PM 12h" = "#EBC855")
+stage_vector <- c("Virgin", "PM 6h", "PM 12h", "Virgin", "PM 6h", "PM 12h")
+
+top_anno_trans <- HeatmapAnnotation(
+  Stage = stage_vector,
+  col = list(Stage = stage_colors),
+  show_annotation_name = FALSE, 
+  show_legend = FALSE,          
+  simple_anno_size = unit(0.4, "cm") 
+)
+
+top_anno_prot <- HeatmapAnnotation(
+  Stage = stage_vector,
+  col = list(Stage = stage_colors),
+  show_annotation_name = FALSE,
+  show_legend = FALSE,
+  simple_anno_size = unit(0.4, "cm")
+)
+
+# 2.2 Note
+all_note1_types <- na.omit(unique(df$Note1))
+all_note2_types <- na.omit(unique(df$Note2))
+
+global_note1_colors <- setNames(rainbow(length(all_note1_types)), all_note1_types)
+global_note2_colors <- setNames(heat.colors(length(all_note2_types)), all_note2_types)
+
+global_note1_bg <- setNames(rep("white", length(all_note1_types)), all_note1_types)
+global_note2_bg <- setNames(rep("white", length(all_note2_types)), all_note2_types)
+
+# 2.3 label
+lgd_note1 <- Legend(
+  title = "Note1 (Spermatheca/Eu)", 
+  title_gp = gpar(fontsize = 10, fontface = "bold"),
+  labels = names(global_note1_colors), 
+  type = "points", 
+  pch = "\u25BA", 
+  legend_gp = gpar(col = global_note1_colors),
+  background = "white"  
+)
+
+lgd_note2 <- Legend(
+  title = "Note2 (Detection)", 
+  title_gp = gpar(fontsize = 10, fontface = "bold"),
+  labels = names(global_note2_colors), 
+  type = "points", 
+  pch = "\u25BA", 
+  legend_gp = gpar(col = global_note2_colors),
+  background = "white"
+)
+
+lgd_stage <- Legend(
+  title = "Stage",
+  title_gp = gpar(fontsize = 10, fontface = "bold"),
+  labels = names(stage_colors),
+  legend_gp = gpar(fill = stage_colors),
+  type = "grid" 
+)
+
+# 3. heatmap
+# 3.1 get all GO term
+all_gos <- na.omit(unique(df$`GO term`))
+cell_side <- unit(0.5, "cm")
+
+print(paste("Detected", length(all_gos), "unique GO term, starts painting"))
+
+for (current_go in all_gos) {
+  
+  print(paste("Processing", current_go))
+  
+  sub_df <- df[df$`GO term` == current_go, ]
+  sub_df <- column_to_rownames(sub_df, var = "...1")
+  
+  if(nrow(sub_df) == 0) next
+  
+  mat_trans <- as.matrix(sub_df[, 1:6])
+  mat_prot  <- as.matrix(sub_df[, 7:12])
+  
+  if (is.character(mat_prot)) {
+    mat_prot_num <- matrix(as.numeric(mat_prot), nrow = nrow(mat_prot))
+    dimnames(mat_prot_num) <- dimnames(mat_prot)
+    mat_prot <- mat_prot_num
+  }
+  
+  trans_all_less_than_1 <- apply(mat_trans, 1, function(x) all(x < 1, na.rm = TRUE))
+  
+  mat_trans_scaled <- scale_rows(mat_trans)
+  mat_prot_scaled  <- scale_rows(mat_prot)
+  
+  do_cluster <- nrow(sub_df) > 1
+  
+  left_annotation <- rowAnnotation(
+    Note1 = anno_simple(
+      sub_df$Note1, 
+      pch = "\u25BA", 
+      col = global_note1_bg[sub_df$Note1], 
+      pt_gp = gpar(col = global_note1_colors[sub_df$Note1], cex = 1.0)
+    ),
+    Note2 = anno_simple(
+      sub_df$Note2, 
+      pch = "\u25BA", 
+      col = global_note2_bg[sub_df$Note2], 
+      pt_gp = gpar(col = global_note2_colors[sub_df$Note2], cex = 1.0)
+    ),
+    show_annotation_name = TRUE
+  )
+  
+  ht_trans <- Heatmap(
+    mat_trans_scaled,
+    name = "Transcriptome\n(Z-score)",
+    col = color_map,
+    cluster_rows = do_cluster,     # 动态聚类开关
+    cluster_columns = FALSE,       
+    rect_gp = gpar(col = "black", lwd = 0.1), 
+    width = ncol(mat_trans_scaled) * cell_side,
+    height = nrow(mat_trans_scaled) * cell_side,
+    row_dend_side = "left", 
+    top_annotation = top_anno_trans,
+    column_title = "Transcriptome",
+    column_title_gp = gpar(fontsize = 14, fontface = "bold"),
+    show_column_names = FALSE,
+    
+    cell_fun = function(j, i, x, y, width, height, fill) {
+      if (trans_all_less_than_1[i]) {
+        grid.rect(x, y, width, height, gp = gpar(fill = "white", col = "black", lwd = 0.1))
+      }
+    }
+  )
+  
+  ht_prot <- Heatmap(
+    mat_prot_scaled,
+    name = "Proteome\n(Z-score)",
+    col = color_map,
+    cluster_rows = do_cluster, 
+    cluster_columns = FALSE,
+    rect_gp = gpar(col = "black", lwd = 0.1), 
+    na_col = "white", 
+    width = ncol(mat_prot_scaled) * cell_side,
+    height = nrow(mat_prot_scaled) * cell_side,
+    top_annotation = top_anno_prot,
+    column_title = "Proteome",
+    column_title_gp = gpar(fontsize = 14, fontface = "bold"),
+    show_column_names = FALSE
+  )
+  
+  ht_list <- left_annotation + ht_trans + ht_prot
+  
+  safe_go_name <- gsub("[/:*?\"<>| ]", "_", current_go)
+  pdf_filename <- paste0("Heatmap_GO_", safe_go_name, ".pdf")
+  
+  pdf(pdf_filename, width = 12, height = 7) 
+  
+  draw(
+    ht_list, 
+    main_heatmap = "Transcriptome\n(Z-score)", # 以转录组为聚类主导
+    column_title = paste(current_go),
+    column_title_gp = gpar(fontsize = 16, fontface = "bold"),
+    annotation_legend_list = list(lgd_stage, lgd_note1, lgd_note2),
+    annotation_legend_side = "right"
+  )
+  
+  dev.off()
+}
+
+print("All done.")
+```
+
