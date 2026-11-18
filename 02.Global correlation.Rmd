@@ -15,6 +15,7 @@ library(readxl)
 ```
 
 ```{r}
+# A. Global correlation between transcriptomic and proteomic expression levels
 prot_raw <- read_excel("~/PMR/ZLY_Workspace/02. Workspace/07.tissue-specific/04.pattern_heatmap/input/01.Dpse_protein_merge_LFQraw -2.xlsx")
 prot_raw <- as.data.frame(prot_raw) %>%
   mutate(...1 = make.unique(...1, sep = "-")) %>%
@@ -101,3 +102,874 @@ p_global_final <- ggplot(scatter_df_global, aes(x = log10(Mean_RNA + 1), y = log
 print(p_global_final)
 ```
 
+```{r}
+# B. Correlation between male and femlae tissues
+# 1. Load packages
+packages <- c("ggplot2", "patchwork")
+
+for (pkg in packages) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    install.packages(pkg)
+  }
+}
+
+# 2. Input and output paths
+input_file <- file.choose()
+output_file <- "D:/Documents/PMR/文章撰写/v5/new analysis/03_expanded_figure.pdf"
+dir.create(
+  dirname(output_file),
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+dat <- read.csv(
+  input_file,
+  check.names = FALSE,
+  stringsAsFactors = FALSE
+)
+
+# 3. Define male and female tissue groups
+male_groups <- list(
+
+  "Accessory gland" = c(
+    "M_AG_1", "M_AG_2", "M_AG_3"
+  ),
+
+  "Seminal vesicle" = c(
+    "M_SV_1", "M_SV_2", "M_SV_3"
+  ),
+
+  "Testis" = c(
+    "M_testis_1", "M_testis_2"
+  ),
+
+  "Head" = c(
+    "M_head_1", "M_head_2"
+  )
+)
+
+female_groups <- list(
+
+  "FRT" = c(
+    "F_virgin_FRT_1",
+    "F_virgin_FRT_2",
+    "F_virgin_FRT_3"
+  ),
+
+  "Spermatheca" = c(
+    "F_virgin_SP_1",
+    "F_virgin_SP_2",
+    "F_virgin_SP_3"
+  ),
+
+  "Ovary" = c(
+    "F_ovary._1",
+    "F_ovary._2"
+  ),
+
+  "Head" = c(
+    "F_head._1",
+    "F_head._2"
+  )
+)
+
+sample_cols <- unique(c(
+  unlist(male_groups),
+  unlist(female_groups)
+))
+
+missing_cols <- setdiff(
+  sample_cols,
+  colnames(dat)
+)
+
+if (length(missing_cols) > 0) {
+  stop(
+    paste(
+      "Missing sample columns:",
+      paste(missing_cols, collapse = ", ")
+    )
+  )
+}
+
+# 4. Calculate TPM
+if (any(is.na(dat$Length)) ||
+    any(dat$Length <= 0)) {
+  stop("Invalid gene length detected.")
+}
+gene_id <- dat$gene_id
+
+count_mat <- as.matrix(
+  dat[, sample_cols, drop = FALSE]
+)
+
+storage.mode(count_mat) <- "numeric"
+
+count_mat[is.na(count_mat)] <- 0
+
+rownames(count_mat) <- gene_id
+
+rpk <- sweep(
+  count_mat,
+  1,
+  dat$Length / 1000,
+  FUN = "/"
+)
+
+tpm <- sweep(
+  rpk,
+  2,
+  colSums(rpk),
+  FUN = "/"
+) * 1e6
+
+log_tpm <- log2(tpm + 1)
+
+# 5. Identify the 6,300 shared expressed genes (Criteria:TPM >= 1 in at least 2 biological replicates; in EACH of the four reproductive tissues:AG, SV, FRT and Spermatheca.)
+expressed_in_tissue <- function(samples) {
+
+  rowSums(
+    tpm[, samples, drop = FALSE] >= 1
+  ) >= 2
+
+}
+
+shared_genes <- (
+  expressed_in_tissue(male_groups[["Accessory gland"]]) &
+  expressed_in_tissue(male_groups[["Seminal vesicle"]]) &
+  expressed_in_tissue(female_groups[["FRT"]]) &
+  expressed_in_tissue(female_groups[["Spermatheca"]])
+)
+
+shared_genes <- rownames(tpm)[shared_genes]
+
+cat(
+  "Number of shared expressed genes:",
+  length(shared_genes),
+  "\n"
+)
+
+if (length(shared_genes) == 0) {
+  stop("No shared expressed genes detected.")
+}
+
+# 6. Calculate mean expression for each tissue
+male_mean <- sapply(
+  names(male_groups),
+  function(tissue) {
+
+    rowMeans(
+      log_tpm[
+        shared_genes,
+        male_groups[[tissue]],
+        drop = FALSE
+      ]
+    )
+
+  }
+)
+
+female_mean <- sapply(
+  names(female_groups),
+  function(tissue) {
+
+    rowMeans(
+      log_tpm[
+        shared_genes,
+        female_groups[[tissue]],
+        drop = FALSE
+      ]
+    )
+
+  }
+)
+
+rownames(male_mean) <- shared_genes
+rownames(female_mean) <- shared_genes
+
+# 7. Calculate all 25 Spearman correlations
+correlation_function <- function(x, y) {
+
+  test <- cor.test(
+    x,
+    y,
+    method = "spearman",
+    exact = FALSE
+  )
+
+  return(
+    data.frame(
+      rho = as.numeric(test$estimate),
+      p_value = test$p.value,
+      n = length(x)
+    )
+  )
+
+}
+
+cor_results <- list()
+
+for (m in names(male_groups)) {
+
+  for (f in names(female_groups)) {
+
+    result <- correlation_function(
+      male_mean[shared_genes, m],
+      female_mean[shared_genes, f]
+    )
+
+    cor_results[[length(cor_results) + 1]] <-
+      data.frame(
+        male_tissue = m,
+        female_tissue = f,
+        result
+      )
+
+  }
+}
+
+cor_results <- do.call(
+  rbind,
+  cor_results
+)
+
+cor_results$FDR <- p.adjust(
+  cor_results$p_value,
+  method = "BH"
+)
+
+write.csv(
+  cor_results,
+  sub(
+    ".pdf",
+    "_correlation_statistics.csv",
+    output_file
+  ),
+  row.names = FALSE
+)
+
+print(cor_results)
+```
+
+
+```{r}
+# 8. Four reproductive-tissue scatterplots
+focal_pairs <- data.frame(
+
+  male_tissue = c(
+    "Accessory gland",
+    "Accessory gland",
+    "Seminal vesicle",
+    "Seminal vesicle"
+  ),
+
+  female_tissue = c(
+    "FRT",
+    "Spermatheca",
+    "FRT",
+    "Spermatheca"
+  ),
+
+  stringsAsFactors = FALSE
+
+)
+
+scatter_data <- list()
+
+for (i in seq_len(nrow(focal_pairs))) {
+
+  m <- focal_pairs$male_tissue[i]
+  f <- focal_pairs$female_tissue[i]
+
+  stat <- cor_results[
+    cor_results$male_tissue == m &
+    cor_results$female_tissue == f,
+  ]
+
+  label <- sprintf(
+    "%s vs %s\nn = %d; Spearman rho = %.3f",
+    m, f, stat$n, stat$rho
+  )
+
+  scatter_data[[i]] <- data.frame(
+
+    gene = shared_genes,
+
+    male_expression = male_mean[
+      shared_genes, m
+    ],
+
+    female_expression = female_mean[
+      shared_genes, f
+    ],
+
+    comparison = label
+
+  )
+
+}
+
+scatter_df <- do.call(
+  rbind,
+  scatter_data
+)
+
+scatter_df$comparison <- factor(
+  scatter_df$comparison,
+  levels = unique(scatter_df$comparison)
+)
+
+p_scatter <- ggplot(
+  scatter_df,
+  aes(
+    x = male_expression,
+    y = female_expression
+  )
+) +
+
+  # Grey points
+  geom_point(
+    color = "grey65",
+    alpha = 0.40,
+    size = 0.65
+  ) +
+
+  # Black regression line
+  geom_smooth(
+    method = "lm",
+    se = FALSE,
+    color = "black",
+    linewidth = 0.6
+  ) +
+
+  facet_wrap(
+    ~ comparison,
+    ncol = 2,
+    scales = "free"
+  ) +
+
+  labs(
+    title = "A. Shared-gene expression in reproductive tissues",
+
+    x = expression(
+      "Male tissue mean expression: log"[2] * "(TPM + 1)"
+    ),
+
+    y = expression(
+      "Female tissue mean expression: log"[2] * "(TPM + 1)"
+    )
+  ) +
+
+  theme_bw(base_size = 11) +
+
+  theme(
+
+    plot.title = element_text(
+      face = "bold",
+      size = 13
+    ),
+
+    strip.background = element_rect(
+      fill = "grey90",
+      color = "grey40"
+    ),
+
+    strip.text = element_text(
+      size = 9.5
+    ),
+
+    panel.grid = element_blank(),
+
+    panel.border = element_rect(
+      color = "grey65",
+      fill = NA
+    ),
+
+    axis.title = element_text(
+      size = 11
+    ),
+
+    axis.text = element_text(
+      color = "black"
+    ),
+
+    panel.spacing = grid::unit(
+      0.8, "lines"
+    )
+
+  )
+p_scatter
+```
+
+```{r}
+# C. Global correlation in each tissue
+
+# ============================================================
+# RNA-seq vs Proteomics
+# Spearman correlation in 9 tissue / time-point groups
+# ============================================================
+
+library(tidyverse)
+library(ggplot2)
+
+# 1. File paths -----------------------------------------------
+
+rna_file <- "D:/Documents/PMR/文章撰写/v5/new analysis/01.相关性/01.Dpse_merge_rawdata2.csv"
+
+protein_file <- "D:/Documents/PMR/文章撰写/v5/new analysis/01.相关性/Dpse_protein_merge_LFQraw.csv"
+
+out_dir <- "D:/Documents/PMR/文章撰写/v5/new analysis/01.相关性/correlation_results"
+
+dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
+
+
+# 2. Read data ------------------------------------------------
+
+rna <- read.csv(
+  rna_file,
+  check.names = FALSE,
+  stringsAsFactors = FALSE
+)
+
+protein <- read.csv(
+  protein_file,
+  check.names = FALSE,
+  stringsAsFactors = FALSE
+)
+
+# Remove empty column names
+clean_names <- function(df) {
+
+  nm <- trimws(names(df))
+
+  keep <- !is.na(nm) & nm != ""
+
+  df <- df[, keep, drop = FALSE]
+  nm <- nm[keep]
+
+  names(df) <- make.unique(nm)
+
+  return(df)
+}
+
+rna <- clean_names(rna)
+protein <- clean_names(protein)
+
+# Remove the first index column if it is present
+if (ncol(protein) > 0 &&
+    names(protein)[1] %in% c("X", "Unnamed: 0", "...1")) {
+
+  first_col <- as.character(protein[[1]])
+
+  if (all(first_col == as.character(seq_len(nrow(protein))))) {
+    protein <- protein[, -1, drop = FALSE]
+  }
+}
+
+# Check required columns
+stopifnot(
+  all(c("gene_id", "Length") %in% names(rna)),
+  "Major_geneid" %in% names(protein)
+)
+
+
+# 3. Define actual sample columns ------------------------------
+
+rna_groups <- list(
+
+  "Accessory gland" =
+    c("M_AG_1", "M_AG_2", "M_AG_3"),
+
+  "Seminal vesicle" =
+    c("M_SV_1", "M_SV_2", "M_SV_3"),
+
+  "Testis" =
+    c("M_testis_1", "M_testis_2"),
+
+  "FRT - Virgin" =
+    c("F_virgin_FRT_1", "F_virgin_FRT_2",
+      "F_virgin_FRT_3"),
+
+  "FRT - 6 h" =
+    c("F_PM6h_FRT_1", "F_PM6h_FRT_2",
+      "F_PM6h_FRT_3"),
+
+  "FRT - 12 h" =
+    c("F_PM12h_FRT_1", "F_PM12h_FRT_2",
+      "F_PM12h_FRT_3"),
+
+  "Spermatheca - Virgin" =
+    c("F_virgin_SP_1", "F_virgin_SP_2",
+      "F_virgin_SP_3"),
+
+  "Spermatheca - 6 h" =
+    c("F_PM6h_SP_1", "F_PM6h_SP_2",
+      "F_PM6h_SP_3"),
+
+  "Spermatheca - 12 h" =
+    c("F_PM12h_SP_1", "F_PM12h_SP_2",
+      "F_PM12h_SP_3")
+)
+
+
+protein_groups <- list(
+
+  "Accessory gland" =
+    c("AG_1", "AG_2", "AG_3"),
+
+  "Seminal vesicle" =
+    c("SV_1", "SV_2", "SV_3"),
+
+  "Testis" =
+    c("Testis_1", "Testis_2", "Testis_3"),
+
+  "FRT - Virgin" =
+    c("FRT_virgin_1", "FRT_virgin_2",
+      "FRT_virgin_3"),
+
+  "FRT - 6 h" =
+    c("FRT_6h_1", "FRT_6h_2", "FRT_6h_3"),
+
+  "FRT - 12 h" =
+    c("FRT_12h_1", "FRT_12h_2", "FRT_12h_3"),
+
+  "Spermatheca - Virgin" =
+    c("SP_virgin_1", "SP_virgin_2",
+      "SP_virgin_3"),
+
+  "Spermatheca - 6 h" =
+    c("SP_6h_1", "SP_6h_2", "SP_6h_3"),
+
+  "Spermatheca - 12 h" =
+    c("SP_12h_1", "SP_12h_2", "SP_12h_3")
+)
+
+
+# Check sample names
+stopifnot(
+  all(unlist(rna_groups) %in% names(rna)),
+  all(unlist(protein_groups) %in% names(protein))
+)
+
+
+# 4. Calculate RNA TPM ----------------------------------------
+
+valid <- !is.na(rna$gene_id) &
+         !is.na(rna$Length) &
+         rna$Length > 0
+
+rna_valid <- rna[valid, ]
+
+counts <- as.matrix(
+  rna_valid[, unique(unlist(rna_groups)), drop = FALSE]
+)
+
+storage.mode(counts) <- "numeric"
+
+gene_length <- as.numeric(rna_valid$Length)
+
+rate <- sweep(
+  counts,
+  1,
+  gene_length,
+  "/"
+)
+
+library_size <- colSums(rate, na.rm = TRUE)
+
+TPM <- sweep(
+  rate,
+  2,
+  library_size,
+  "/"
+) * 1e6
+
+rownames(TPM) <- as.character(rna_valid$gene_id)
+
+
+# 5. Prepare protein data -------------------------------------
+
+protein$Major_geneid <- trimws(
+  as.character(protein$Major_geneid)
+)
+
+# Exclude protein groups mapped to multiple gene IDs
+protein_single <- protein %>%
+  filter(
+    !is.na(Major_geneid),
+    Major_geneid != "",
+    !str_detect(Major_geneid, fixed(";"))
+  )
+
+if (anyDuplicated(protein_single$Major_geneid)) {
+  stop("Duplicated protein gene IDs detected.")
+}
+
+cat("RNA genes:", nrow(rna_valid), "\n")
+
+cat("Single-gene protein groups:",
+    nrow(protein_single), "\n")
+
+cat("Exact shared gene IDs:",
+    length(intersect(
+      TPM |> rownames(),
+      protein_single$Major_geneid
+    )), "\n")
+
+
+# 6. Calculate 9 independent correlations ---------------------
+
+all_data <- list()
+all_stats <- list()
+
+for (g in names(rna_groups)) {
+
+  cat("\nProcessing:", g, "\n")
+
+  rna_cols <- rna_groups[[g]]
+  protein_cols <- protein_groups[[g]]
+
+  # RNA: mean TPM across biological replicates
+
+  rna_mean <- rowMeans(
+    TPM[, rna_cols, drop = FALSE],
+    na.rm = TRUE
+  )
+
+  rna_df <- data.frame(
+    gene_id = rownames(TPM),
+    RNA_log2 = log2(rna_mean + 1)
+  ) %>%
+    filter(
+      is.finite(RNA_log2),
+      RNA_log2 > 0
+    )
+
+  # Protein: convert zero intensity to NA
+
+  protein_matrix <- as.matrix(
+    protein_single[, protein_cols, drop = FALSE]
+  )
+
+  storage.mode(protein_matrix) <- "numeric"
+
+  protein_matrix[
+    !is.finite(protein_matrix) |
+    protein_matrix <= 0
+  ] <- NA_real_
+
+  # Log2 transform each replicate
+
+  protein_log <- log2(protein_matrix)
+
+  # Number of detected biological replicates
+
+  n_detected <- rowSums(!is.na(protein_log))
+
+  # Mean log2 LFQ intensity
+
+  protein_mean <- rowMeans(
+    protein_log,
+    na.rm = TRUE
+  )
+
+  # Require detection in at least 2 replicates
+
+  protein_mean[n_detected < 2] <- NA_real_
+
+  protein_df <- data.frame(
+    gene_id = protein_single$Major_geneid,
+    Protein_log2 = protein_mean,
+    n_detected = n_detected
+  ) %>%
+    filter(
+      is.finite(Protein_log2),
+      n_detected >= 2
+    )
+
+  # Match genes between the two datasets
+
+  merged <- inner_join(
+    rna_df,
+    protein_df,
+    by = "gene_id"
+  )
+
+  if (nrow(merged) < 3) {
+    stop(paste("Insufficient shared genes:", g))
+  }
+
+  # Spearman correlation
+
+  ct <- cor.test(
+    merged$RNA_log2,
+    merged$Protein_log2,
+    method = "spearman",
+    exact = FALSE
+  )
+
+  rho <- as.numeric(ct$estimate)
+  pval <- ct$p.value
+
+  cat("Shared genes:", nrow(merged), "\n")
+  cat("Spearman rho:", round(rho, 3), "\n")
+  cat("P-value:", signif(pval, 4), "\n")
+
+  # Save statistics
+
+  all_stats[[g]] <- data.frame(
+    Group = g,
+    n = nrow(merged),
+    Spearman_rho = rho,
+    P_value = pval
+  )
+
+  merged$Group <- g
+
+  all_data[[g]] <- merged
+}
+
+
+# 7. Combine results -------------------------------------------
+
+plot_data <- bind_rows(all_data)
+
+stats <- bind_rows(all_stats)
+
+plot_data$Group <- factor(
+  plot_data$Group,
+  levels = names(rna_groups)
+)
+
+stats$Group <- factor(
+  stats$Group,
+  levels = names(rna_groups)
+)
+
+stats$label <- paste0(
+  "n = ", stats$n,
+  "\nSpearman rho = ",
+  sprintf("%.3f", stats$Spearman_rho),
+  "\nP = ",
+  format.pval(stats$P_value, digits = 3)
+)
+
+
+# 8. Plot ------------------------------------------------------
+
+p <- ggplot(
+  plot_data,
+  aes(
+    x = RNA_log2,
+    y = Protein_log2
+  )
+) +
+
+  geom_point(
+    color = "grey55",
+    alpha = 0.25,
+    size = 0.6
+  ) +
+
+  geom_smooth(
+    method = "lm",
+    formula = y ~ x,
+    se = FALSE,
+    color = "#D55E00",
+    linewidth = 0.8
+  ) +
+
+  geom_text(
+    data = stats,
+    aes(
+      x = Inf,
+      y = -Inf,
+      label = label
+    ),
+    inherit.aes = FALSE,
+    hjust = 1.05,
+    vjust = -0.4,
+    size = 3.1
+  ) +
+
+  facet_wrap(
+    ~Group,
+    ncol = 3,
+    scales = "free"
+  ) +
+
+  labs(
+    title = "Transcript–protein abundance correlations",
+    x = expression(log[2](mean~TPM + 1)),
+    y = expression(mean~log[2](LFQ~intensity))
+  ) +
+
+  theme_bw(base_size = 12) +
+
+  theme(
+    plot.title = element_text(
+      hjust = 0.5,
+      face = "bold"
+    ),
+    strip.text = element_text(
+      face = "bold",
+      size = 10
+    ),
+    panel.grid = element_blank(),
+    strip.background = element_rect(
+      fill = "grey90"
+    )
+  )
+
+
+# 9. Export PDF -----------------------------------------------
+
+ggsave(
+  file.path(
+    out_dir,
+    "RNA_protein_correlation_9groups.pdf"
+  ),
+  plot = p,
+  width = 13,
+  height = 10,
+  device = "pdf"
+)
+
+
+# 10. Export statistics ----------------------------------------
+
+stats_export <- stats %>%
+  mutate(
+    P_adjusted_BH = p.adjust(P_value, method = "BH")
+  )
+
+write.csv(
+  stats_export,
+  file.path(
+    out_dir,
+    "RNA_protein_correlation_statistics.csv"
+  ),
+  row.names = FALSE
+)
+
+
+# 11. Export matched gene data ---------------------------------
+
+write.csv(
+  plot_data,
+  file.path(
+    out_dir,
+    "RNA_protein_correlation_gene_data.csv"
+  ),
+  row.names = FALSE
+)
+
+
+# 12. Display results ------------------------------------------
+
+print(stats_export)
+print(p)
+
+cat("\nAll analyses completed!\n")
+
+```
